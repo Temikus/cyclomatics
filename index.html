@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cyclomatic Complexity Explorer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: #f6f8fa;
+      color: #1f2328;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    header {
+      background: #ffffff;
+      border-bottom: 1px solid #d1d9e0;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1f2328;
+    }
+
+    header h1 span {
+      color: #1a7f37;
+    }
+
+    .complexity-badge {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .complexity-badge .label {
+      font-size: 13px;
+      color: #59636e;
+    }
+
+    .complexity-badge .value {
+      font-size: 28px;
+      font-weight: 700;
+      min-width: 40px;
+      text-align: center;
+      transition: color 0.3s;
+    }
+
+    .complexity-low { color: #1a7f37; }
+    .complexity-med { color: #9a6700; }
+    .complexity-high { color: #d1242f; }
+
+    .main {
+      display: flex;
+      height: calc(100vh - 56px);
+    }
+
+    /* Left panel - code */
+    .code-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid #d1d9e0;
+      min-width: 0;
+    }
+
+    .example-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 10px 12px;
+      background: #f6f8fa;
+      border-bottom: 1px solid #d1d9e0;
+      flex-shrink: 0;
+    }
+
+    .example-tabs button {
+      background: #ffffff;
+      border: 1px solid #d1d9e0;
+      color: #59636e;
+      padding: 5px 12px;
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      border-radius: 20px;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+
+    .example-tabs button:hover {
+      color: #1f2328;
+      background: #eef1f5;
+      border-color: #bbc0c7;
+    }
+
+    .example-tabs button.active {
+      color: #ffffff;
+      background: #1a7f37;
+      border-color: #1a7f37;
+      font-weight: 600;
+    }
+
+    .code-container {
+      flex: 1;
+      overflow: auto;
+      padding: 20px;
+      background: #ffffff;
+    }
+
+    .code-display {
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 14px;
+      line-height: 1.7;
+      tab-size: 2;
+    }
+
+    .code-display .line {
+      display: flex;
+      padding: 1px 4px;
+      border-radius: 3px;
+      transition: background 0.15s;
+    }
+
+    .code-display .line:hover {
+      background: #f6f8fa;
+    }
+
+    .code-display .line.highlighted {
+      background: #dafbe1;
+    }
+
+    .code-display .line-num {
+      color: #8c959f;
+      min-width: 36px;
+      text-align: right;
+      padding-right: 16px;
+      user-select: none;
+      flex-shrink: 0;
+    }
+
+    .code-display .line-content {
+      white-space: pre;
+    }
+
+    /* Syntax highlighting — light theme */
+    .kw { color: #cf222e; }
+    .fn { color: #8250df; }
+    .str { color: #0a3069; }
+    .cmt { color: #6e7781; font-style: italic; }
+    .num { color: #0550ae; }
+    .op { color: #cf222e; }
+
+    /* Right panel - graph */
+    .graph-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .graph-header {
+      background: #ffffff;
+      border-bottom: 1px solid #d1d9e0;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .graph-header h2 {
+      font-size: 13px;
+      font-weight: 600;
+      color: #59636e;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .formula {
+      font-size: 13px;
+      color: #59636e;
+    }
+
+    .formula b {
+      color: #1f2328;
+      font-weight: 600;
+    }
+
+    .formula sub {
+      font-size: 10px;
+      color: #8c959f;
+      margin-left: 1px;
+    }
+
+    .formula-term {
+      cursor: help;
+      border-bottom: 1px dashed #bbc0c7;
+      padding-bottom: 1px;
+    }
+
+    .formula-legend {
+      background: #f6f8fa;
+      border-bottom: 1px solid #d1d9e0;
+      padding: 6px 20px;
+      font-size: 11px;
+      color: #656d76;
+      line-height: 1.5;
+      flex-shrink: 0;
+    }
+
+    .formula-legend b {
+      color: #1f2328;
+    }
+
+    .formula-legend-sep {
+      margin: 0 8px;
+      color: #d1d9e0;
+    }
+
+    .graph-container {
+      flex: 1;
+      position: relative;
+      overflow: auto;
+      background: #ffffff;
+    }
+
+    .graph-container svg {
+      width: 100%;
+      min-height: 100%;
+    }
+
+    /* Stats bar */
+    .stats-bar {
+      background: #ffffff;
+      border-top: 1px solid #d1d9e0;
+      padding: 12px 20px;
+      display: flex;
+      gap: 24px;
+      flex-shrink: 0;
+    }
+
+    .stat {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+    }
+
+    .stat .stat-label { color: #59636e; }
+    .stat .stat-value { color: #1f2328; font-weight: 600; }
+    .stat .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .dot-nodes { background: #0969da; }
+    .dot-edges { background: #8250df; }
+    .dot-paths { background: #1a7f37; }
+
+    /* Description area */
+    .description {
+      background: #ffffff;
+      border-top: 1px solid #d1d9e0;
+      padding: 16px 20px;
+      flex-shrink: 0;
+    }
+
+    .description h3 {
+      font-size: 13px;
+      color: #1f2328;
+      margin-bottom: 6px;
+    }
+
+    .description p {
+      font-size: 12px;
+      color: #59636e;
+      line-height: 1.5;
+    }
+
+    /* SVG styles */
+    .node-pill {
+      fill: #ffffff;
+      stroke: #0969da;
+      stroke-width: 2.5;
+      rx: 20;
+      ry: 20;
+    }
+
+    .node-pill.entry { stroke: #1a7f37; }
+    .node-pill.exit { stroke: #d1242f; }
+    .node-pill.decision { stroke: #9a6700; }
+
+    .node-label {
+      fill: #1f2328;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      text-anchor: middle;
+      dominant-baseline: central;
+      pointer-events: none;
+    }
+
+    .edge-path {
+      stroke: #8c959f;
+      stroke-width: 2.5;
+      fill: none;
+    }
+
+    .edge-path.true-branch { stroke: #2da44e; }
+    .edge-path.false-branch { stroke: #d97706; }
+
+    .edge-label {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      text-anchor: middle;
+      dominant-baseline: central;
+      pointer-events: none;
+    }
+
+    .edge-label.true-label { fill: #2da44e; }
+    .edge-label.false-label { fill: #d97706; }
+    .edge-label.neutral-label { fill: #59636e; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Cyclomatic <span>Complexity</span> Explorer</h1>
+    <div class="complexity-badge">
+      <span class="label">Complexity (M) =</span>
+      <span class="value" id="complexity-value">1</span>
+    </div>
+  </header>
+
+  <div class="main">
+    <div class="code-panel">
+      <div class="example-tabs" id="example-tabs"></div>
+      <div class="code-container">
+        <div class="code-display" id="code-display"></div>
+      </div>
+      <div class="description" id="description"></div>
+    </div>
+
+    <div class="graph-panel">
+      <div class="graph-header">
+        <h2>Control Flow Graph</h2>
+        <div class="formula">
+          <span class="formula-term" title="Cyclomatic complexity: the number of independent paths through the code">M</span> =
+          <span class="formula-term" title="Edges: transitions between statements (arrows in the graph)"><b id="edge-count">0</b><sub>E</sub></span>
+          &minus;
+          <span class="formula-term" title="Nodes: individual statements or decision points (boxes in the graph)"><b id="node-count">0</b><sub>N</sub></span>
+          + <span class="formula-term" title="Accounts for the entry and exit points of the program">2</span>
+        </div>
+      </div>
+      <div class="formula-legend">
+        <span><b>E</b> = edges (arrows &mdash; transitions between statements)</span>
+        <span class="formula-legend-sep">&middot;</span>
+        <span><b>N</b> = nodes (boxes &mdash; statements &amp; decisions)</span>
+        <span class="formula-legend-sep">&middot;</span>
+        <span><b>+2</b> connects entry &amp; exit into one closed graph</span>
+      </div>
+      <div class="graph-container" id="graph-container">
+        <svg id="graph-svg">
+          <defs>
+            <marker id="arrow" markerWidth="12" markerHeight="9" refX="12" refY="4.5" orient="auto" markerUnits="strokeWidth">
+              <polygon points="0 0, 12 4.5, 0 9" fill="#8c959f" />
+            </marker>
+            <marker id="arrow-true" markerWidth="12" markerHeight="9" refX="12" refY="4.5" orient="auto" markerUnits="strokeWidth">
+              <polygon points="0 0, 12 4.5, 0 9" fill="#2da44e" />
+            </marker>
+            <marker id="arrow-false" markerWidth="12" markerHeight="9" refX="12" refY="4.5" orient="auto" markerUnits="strokeWidth">
+              <polygon points="0 0, 12 4.5, 0 9" fill="#d97706" />
+            </marker>
+          </defs>
+        </svg>
+      </div>
+      <div class="stats-bar">
+        <div class="stat">
+          <div class="dot dot-edges"></div>
+          <span class="stat-label">Edges (E):</span>
+          <span class="stat-value" id="stat-edges">0</span>
+        </div>
+        <div class="stat">
+          <div class="dot dot-nodes"></div>
+          <span class="stat-label">Nodes (N):</span>
+          <span class="stat-value" id="stat-nodes">0</span>
+        </div>
+        <div class="stat">
+          <div class="dot dot-paths"></div>
+          <span class="stat-label">Independent Paths:</span>
+          <span class="stat-value" id="stat-paths">0</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Examples with explicit grid positions ────────────────────────────
+    // Positions are on a logical grid: col (0-based), row (0-based).
+    // The renderer scales them to fit the SVG.
+    const examples = [
+      {
+        name: "Simple",
+        complexity: 1,
+        description: "A straight-line function with no branches. Cyclomatic complexity is 1 — there's exactly one path through the code.",
+        code: `function greet(name) {
+  const message = "Hello, " + name;
+  console.log(message);
+  return message;
+}`,
+        highlightLines: [],
+        nodes: [
+          { id: "start", label: "entry", type: "entry", col: 0, row: 0 },
+          { id: "s1", label: "message =", type: "normal", col: 0, row: 1 },
+          { id: "s2", label: "log()", type: "normal", col: 0, row: 2 },
+          { id: "s3", label: "return", type: "normal", col: 0, row: 3 },
+          { id: "end", label: "exit", type: "exit", col: 0, row: 4 },
+        ],
+        edges: [
+          { from: "start", to: "s1" },
+          { from: "s1", to: "s2" },
+          { from: "s2", to: "s3" },
+          { from: "s3", to: "end" },
+        ]
+      },
+      {
+        name: "If/Else",
+        complexity: 2,
+        description: "One if/else branch adds one decision point. Complexity = 2, meaning two independent paths: one where age >= 18 and one where it isn't.",
+        code: `function checkAge(age) {
+  if (age >= 18) {
+    return "adult";
+  } else {
+    return "minor";
+  }
+}`,
+        highlightLines: [2],
+        nodes: [
+          { id: "start", label: "entry", type: "entry", col: 1, row: 0 },
+          { id: "d1", label: "age >= 18?", type: "decision", col: 1, row: 1 },
+          { id: "s1", label: '"adult"', type: "normal", col: 0, row: 2 },
+          { id: "s2", label: '"minor"', type: "normal", col: 2, row: 2 },
+          { id: "end", label: "exit", type: "exit", col: 1, row: 3 },
+        ],
+        edges: [
+          { from: "start", to: "d1" },
+          { from: "d1", to: "s1", label: "true", branch: "true" },
+          { from: "d1", to: "s2", label: "false", branch: "false" },
+          { from: "s1", to: "end" },
+          { from: "s2", to: "end" },
+        ]
+      },
+      {
+        name: "If + Else If",
+        complexity: 3,
+        description: "Two decision points give complexity 3. Each condition (if, else if) adds one to the base complexity. Three paths: hot, warm, and cold.",
+        code: `function weather(temp) {
+  if (temp > 30) {
+    return "hot";
+  } else if (temp > 15) {
+    return "warm";
+  } else {
+    return "cold";
+  }
+}`,
+        highlightLines: [2, 4],
+        nodes: [
+          { id: "start", label: "entry", type: "entry", col: 1, row: 0 },
+          { id: "d1", label: "temp > 30?", type: "decision", col: 1, row: 1 },
+          { id: "s1", label: '"hot"', type: "normal", col: 0, row: 2 },
+          { id: "d2", label: "temp > 15?", type: "decision", col: 2, row: 2 },
+          { id: "s2", label: '"warm"', type: "normal", col: 1, row: 3 },
+          { id: "s3", label: '"cold"', type: "normal", col: 3, row: 3 },
+          { id: "end", label: "exit", type: "exit", col: 1, row: 4 },
+        ],
+        edges: [
+          { from: "start", to: "d1" },
+          { from: "d1", to: "s1", label: "true", branch: "true" },
+          { from: "d1", to: "d2", label: "false", branch: "false" },
+          { from: "s1", to: "end" },
+          { from: "d2", to: "s2", label: "true", branch: "true" },
+          { from: "d2", to: "s3", label: "false", branch: "false" },
+          { from: "s2", to: "end" },
+          { from: "s3", to: "end" },
+        ]
+      },
+      {
+        name: "Loop",
+        complexity: 2,
+        description: "A for/while loop adds one decision point (the loop condition). Complexity = 2: one path enters the loop, one skips it.",
+        code: `function sum(numbers) {
+  let total = 0;
+  for (let i = 0; i < numbers.length; i++) {
+    total += numbers[i];
+  }
+  return total;
+}`,
+        highlightLines: [3],
+        nodes: [
+          { id: "start", label: "entry", type: "entry", col: 1, row: 0 },
+          { id: "s1", label: "total = 0", type: "normal", col: 1, row: 1 },
+          { id: "d1", label: "i < len?", type: "decision", col: 1, row: 2 },
+          { id: "s2", label: "total +=", type: "normal", col: 0, row: 3 },
+          { id: "s3", label: "return", type: "normal", col: 2, row: 3 },
+          { id: "end", label: "exit", type: "exit", col: 2, row: 4 },
+        ],
+        edges: [
+          { from: "start", to: "s1" },
+          { from: "s1", to: "d1" },
+          { from: "d1", to: "s2", label: "true", branch: "true" },
+          { from: "d1", to: "s3", label: "false", branch: "false" },
+          { from: "s2", to: "d1", label: "", branch: null },
+          { from: "s3", to: "end" },
+        ]
+      },
+      {
+        name: "Loop + If",
+        complexity: 3,
+        description: "A loop with a conditional inside: two decision points. Complexity = 3. The loop and the if each contribute one branch.",
+        code: `function countPositive(numbers) {
+  let count = 0;
+  for (const n of numbers) {
+    if (n > 0) {
+      count++;
+    }
+  }
+  return count;
+}`,
+        highlightLines: [3, 4],
+        nodes: [
+          { id: "start", label: "entry", type: "entry", col: 1, row: 0 },
+          { id: "s1", label: "count = 0", type: "normal", col: 1, row: 1 },
+          { id: "d1", label: "more items?", type: "decision", col: 1, row: 2 },
+          { id: "d2", label: "n > 0?", type: "decision", col: 0, row: 3 },
+          { id: "s2", label: "count++", type: "normal", col: 0, row: 4 },
+          { id: "s3", label: "return", type: "normal", col: 2, row: 3 },
+          { id: "end", label: "exit", type: "exit", col: 2, row: 4 },
+        ],
+        edges: [
+          { from: "start", to: "s1" },
+          { from: "s1", to: "d1" },
+          { from: "d1", to: "d2", label: "true", branch: "true" },
+          { from: "d1", to: "s3", label: "false", branch: "false" },
+          { from: "d2", to: "s2", label: "true", branch: "true" },
+          { from: "d2", to: "d1", label: "false", branch: "false" },
+          { from: "s2", to: "d1" },
+          { from: "s3", to: "end" },
+        ]
+      },
+      {
+        name: "&& / ||",
+        complexity: 3,
+        description: "Logical operators (&&, ||) add hidden decision points! Each short-circuit operator is an implicit branch. This innocent-looking condition has complexity 3.",
+        code: `function canAccess(user) {
+  if (user.isAdmin && user.isActive) {
+    return true;
+  }
+  return false;
+}`,
+        highlightLines: [2],
+        nodes: [
+          { id: "start", label: "entry", type: "entry", col: 1, row: 0 },
+          { id: "d1", label: "isAdmin?", type: "decision", col: 1, row: 1 },
+          { id: "d2", label: "isActive?", type: "decision", col: 0, row: 2 },
+          { id: "s1", label: "true", type: "normal", col: 0, row: 3 },
+          { id: "s2", label: "false", type: "normal", col: 2, row: 3 },
+          { id: "end", label: "exit", type: "exit", col: 1, row: 4 },
+        ],
+        edges: [
+          { from: "start", to: "d1" },
+          { from: "d1", to: "d2", label: "true", branch: "true" },
+          { from: "d1", to: "s2", label: "false", branch: "false" },
+          { from: "d2", to: "s1", label: "true", branch: "true" },
+          { from: "d2", to: "s2", label: "false", branch: "false" },
+          { from: "s1", to: "end" },
+          { from: "s2", to: "end" },
+        ]
+      },
+      {
+        name: "Nested",
+        complexity: 4,
+        description: "Nested conditions multiply cognitive load. Complexity = 4: each decision adds a path. This is where refactoring with early returns or guard clauses helps.",
+        code: `function process(data) {
+  if (data !== null) {
+    if (data.length > 0) {
+      if (data[0].valid) {
+        return handle(data);
+      }
+    }
+  }
+  return defaultValue;
+}`,
+        highlightLines: [2, 3, 4],
+        nodes: [
+          { id: "start", label: "entry", type: "entry", col: 1, row: 0 },
+          { id: "d1", label: "!= null?", type: "decision", col: 1, row: 1 },
+          { id: "d2", label: "len > 0?", type: "decision", col: 0, row: 2 },
+          { id: "d3", label: "valid?", type: "decision", col: 0, row: 3 },
+          { id: "s1", label: "handle()", type: "normal", col: 0, row: 4 },
+          { id: "s2", label: "default", type: "normal", col: 2, row: 4 },
+          { id: "end", label: "exit", type: "exit", col: 1, row: 5 },
+        ],
+        edges: [
+          { from: "start", to: "d1" },
+          { from: "d1", to: "d2", label: "true", branch: "true" },
+          { from: "d1", to: "s2", label: "false", branch: "false" },
+          { from: "d2", to: "d3", label: "true", branch: "true" },
+          { from: "d2", to: "s2", label: "false", branch: "false" },
+          { from: "d3", to: "s1", label: "true", branch: "true" },
+          { from: "d3", to: "s2", label: "false", branch: "false" },
+          { from: "s1", to: "end" },
+          { from: "s2", to: "end" },
+        ]
+      },
+      {
+        name: "Try/Catch",
+        complexity: 2,
+        description: "A try/catch block adds one decision point — the exception path. The code has two possible flows: normal execution or the error handler.",
+        code: `function parse(json) {
+  try {
+    return JSON.parse(json);
+  } catch (e) {
+    console.error("Bad JSON:", e);
+    return null;
+  }
+}`,
+        highlightLines: [4],
+        nodes: [
+          { id: "start", label: "entry", type: "entry", col: 1, row: 0 },
+          { id: "d1", label: "try", type: "decision", col: 1, row: 1 },
+          { id: "s1", label: "parse()", type: "normal", col: 0, row: 2 },
+          { id: "s2", label: "catch", type: "normal", col: 2, row: 2 },
+          { id: "s3", label: "return null", type: "normal", col: 2, row: 3 },
+          { id: "end", label: "exit", type: "exit", col: 1, row: 4 },
+        ],
+        edges: [
+          { from: "start", to: "d1" },
+          { from: "d1", to: "s1", label: "ok", branch: "true" },
+          { from: "d1", to: "s2", label: "err", branch: "false" },
+          { from: "s1", to: "end" },
+          { from: "s2", to: "s3" },
+          { from: "s3", to: "end" },
+        ]
+      },
+      {
+        name: "Complex",
+        complexity: 6,
+        description: "Multiple loops, conditions, and early returns compound complexity. M = 6 means you need at least 6 test cases for full path coverage. Consider refactoring!",
+        code: `function findFirst(items, filter) {
+  if (!items) return null;
+
+  for (const item of items) {
+    if (!item.active) continue;
+
+    if (filter.type) {
+      if (item.type === filter.type) {
+        return item;
+      }
+    } else {
+      return item;
+    }
+  }
+  return null;
+}`,
+        highlightLines: [2, 4, 5, 7, 8],
+        nodes: [
+          { id: "start", label: "entry", type: "entry", col: 2, row: 0 },
+          { id: "d1", label: "!items?", type: "decision", col: 2, row: 1 },
+          { id: "ret1", label: "null", type: "normal", col: 4, row: 2 },
+          { id: "d2", label: "more?", type: "decision", col: 2, row: 3 },
+          { id: "d3", label: "active?", type: "decision", col: 1, row: 4 },
+          { id: "d4", label: "filter?", type: "decision", col: 1, row: 5 },
+          { id: "d5", label: "match?", type: "decision", col: 0, row: 6 },
+          { id: "ret2", label: "item", type: "normal", col: 0, row: 7 },
+          { id: "ret3", label: "item", type: "normal", col: 2, row: 6 },
+          { id: "ret4", label: "null", type: "normal", col: 4, row: 4 },
+          { id: "end", label: "exit", type: "exit", col: 2, row: 8 },
+        ],
+        edges: [
+          { from: "start", to: "d1" },
+          { from: "d1", to: "d2", label: "false", branch: "false" },
+          { from: "d1", to: "ret1", label: "true", branch: "true" },
+          { from: "ret1", to: "end" },
+          { from: "d2", to: "d3", label: "true", branch: "true" },
+          { from: "d2", to: "ret4", label: "false", branch: "false" },
+          { from: "d3", to: "d4", label: "true", branch: "true" },
+          { from: "d3", to: "d2", label: "false", branch: "false" },
+          { from: "d4", to: "d5", label: "true", branch: "true" },
+          { from: "d4", to: "ret3", label: "false", branch: "false" },
+          { from: "d5", to: "ret2", label: "true", branch: "true" },
+          { from: "d5", to: "d2", label: "false", branch: "false" },
+          { from: "ret2", to: "end" },
+          { from: "ret3", to: "end" },
+          { from: "ret4", to: "end" },
+        ]
+      },
+      {
+        name: "Validator",
+        complexity: 14,
+        description: "A real-world form validator with loops, nested conditions, regex checks, and early returns. M = 14 — you'd need 14 test cases for full branch coverage. This is a clear signal to break the function up.",
+        code: `function validateForm(form) {
+  if (!form) return { valid: false };
+
+  for (const field of form.fields) {
+    if (!field.value && field.required) {
+      return { valid: false, error: field.name };
+    }
+    if (field.type === "email") {
+      if (!field.value.includes("@")) {
+        return { valid: false, error: "email" };
+      }
+    } else if (field.type === "phone") {
+      if (!/^\\d{10}$/.test(field.value)) {
+        return { valid: false, error: "phone" };
+      }
+    } else if (field.type === "age") {
+      const n = Number(field.value);
+      if (isNaN(n) || n < 0 || n > 150) {
+        return { valid: false, error: "age" };
+      }
+    }
+    if (field.validator) {
+      if (!field.validator(field.value)) {
+        return { valid: false, error: "custom" };
+      }
+    }
+  }
+  return { valid: true };
+}`,
+        highlightLines: [2, 4, 5, 8, 9, 12, 13, 16, 18, 22, 23],
+        nodes: [
+          { id: "start", label: "entry", type: "entry", col: 3, row: 0 },
+          { id: "d1", label: "!form?", type: "decision", col: 3, row: 1 },
+          { id: "r1", label: "invalid", type: "normal", col: 5, row: 2 },
+          { id: "d2", label: "more fields?", type: "decision", col: 3, row: 2 },
+          { id: "d3", label: "empty && req?", type: "decision", col: 2, row: 3 },
+          { id: "r2", label: "err: name", type: "normal", col: 0, row: 3 },
+          { id: "d4", label: "email?", type: "decision", col: 2, row: 4 },
+          { id: "d5", label: "has @?", type: "decision", col: 1, row: 5 },
+          { id: "r3", label: "err: email", type: "normal", col: 0, row: 5 },
+          { id: "d6", label: "phone?", type: "decision", col: 3, row: 5 },
+          { id: "d7", label: "digits?", type: "decision", col: 3, row: 6 },
+          { id: "r4", label: "err: phone", type: "normal", col: 5, row: 6 },
+          { id: "d8", label: "age?", type: "decision", col: 4, row: 7 },
+          { id: "d9", label: "valid num?", type: "decision", col: 4, row: 8 },
+          { id: "r5", label: "err: age", type: "normal", col: 5, row: 8 },
+          { id: "d10", label: "custom fn?", type: "decision", col: 2, row: 9 },
+          { id: "d11", label: "passes?", type: "decision", col: 1, row: 10 },
+          { id: "r6", label: "err: custom", type: "normal", col: 0, row: 10 },
+          { id: "r7", label: "valid!", type: "normal", col: 3, row: 11 },
+          { id: "end", label: "exit", type: "exit", col: 3, row: 12 },
+        ],
+        edges: [
+          { from: "start", to: "d1" },
+          { from: "d1", to: "r1", label: "true", branch: "true" },
+          { from: "d1", to: "d2", label: "false", branch: "false" },
+          { from: "r1", to: "end" },
+          { from: "d2", to: "d3", label: "true", branch: "true" },
+          { from: "d2", to: "r7", label: "false", branch: "false" },
+          { from: "d3", to: "r2", label: "true", branch: "true" },
+          { from: "d3", to: "d4", label: "false", branch: "false" },
+          { from: "r2", to: "end" },
+          { from: "d4", to: "d5", label: "true", branch: "true" },
+          { from: "d4", to: "d6", label: "false", branch: "false" },
+          { from: "d5", to: "d10", label: "true", branch: "true" },
+          { from: "d5", to: "r3", label: "false", branch: "false" },
+          { from: "r3", to: "end" },
+          { from: "d6", to: "d7", label: "true", branch: "true" },
+          { from: "d6", to: "d8", label: "false", branch: "false" },
+          { from: "d7", to: "d10", label: "true", branch: "true" },
+          { from: "d7", to: "r4", label: "false", branch: "false" },
+          { from: "r4", to: "end" },
+          { from: "d8", to: "d9", label: "true", branch: "true" },
+          { from: "d8", to: "d10", label: "false", branch: "false" },
+          { from: "d9", to: "d10", label: "true", branch: "true" },
+          { from: "d9", to: "r5", label: "false", branch: "false" },
+          { from: "r5", to: "end" },
+          { from: "d10", to: "d11", label: "true", branch: "true" },
+          { from: "d10", to: "d2", label: "false", branch: "false" },
+          { from: "d11", to: "d2", label: "true", branch: "true" },
+          { from: "d11", to: "r6", label: "false", branch: "false" },
+          { from: "r6", to: "end" },
+          { from: "r7", to: "end" },
+        ]
+      },
+      {
+        name: "Monster",
+        complexity: 28,
+        description: "A nightmarish request handler with auth, validation, rate limiting, feature flags, retries, and error handling. M = 28. This function does far too much — it should be decomposed into at least 6-8 smaller functions. No one can reason about 28 independent paths.",
+        code: `function handleRequest(req, res, config) {
+  if (!req) return res.status(400).send("No request");
+  if (!req.headers) return res.status(400).send("No headers");
+
+  const token = req.headers.auth;
+  if (!token) return res.status(401).send("No token");
+  if (token.expired) return res.status(401).send("Expired");
+
+  const user = db.findUser(token.uid);
+  if (!user) return res.status(404).send("No user");
+  if (user.banned) return res.status(403).send("Banned");
+
+  if (config.rateLimit) {
+    if (user.requests > config.maxReqs) {
+      if (!user.isPremium) {
+        return res.status(429).send("Rate limited");
+      }
+    }
+  }
+
+  if (config.maintenance && !user.isAdmin) {
+    return res.status(503).send("Maintenance");
+  }
+
+  for (const plugin of config.plugins) {
+    if (plugin.enabled) {
+      if (!plugin.check(req)) {
+        return res.status(400).send(plugin.error);
+      }
+    }
+  }
+
+  let result, retries = 0;
+  while (retries < config.maxRetries) {
+    try {
+      result = processRequest(req, user);
+      if (result.ok) break;
+    } catch (e) {
+      if (e.fatal) return res.status(500).send("Fatal");
+    }
+    retries++;
+  }
+
+  if (!result || !result.ok) {
+    return res.status(500).send("Failed after retries");
+  }
+
+  if (config.transform) {
+    if (result.type === "json") {
+      result.data = transform(result.data);
+    } else if (result.type === "xml") {
+      result.data = xmlTransform(result.data);
+    }
+  }
+
+  if (config.cache && req.method === "GET") {
+    cache.set(req.url, result);
+  }
+
+  if (result.redirect) {
+    return res.redirect(result.url);
+  }
+
+  return res.status(200).json(result.data);
+}`,
+        highlightLines: [2, 3, 6, 7, 10, 11, 13, 14, 15, 21, 25, 26, 27, 34, 37, 39, 44, 48, 49, 51, 55, 58, 60],
+        nodes: [
+          { id: "start", label: "entry", type: "entry", col: 4, row: 0 },
+          { id: "d1", label: "!req?", type: "decision", col: 4, row: 1 },
+          { id: "d2", label: "!headers?", type: "decision", col: 4, row: 2 },
+          { id: "d3", label: "!token?", type: "decision", col: 4, row: 3 },
+          { id: "d4", label: "expired?", type: "decision", col: 4, row: 4 },
+          { id: "d5", label: "!user?", type: "decision", col: 4, row: 5 },
+          { id: "d6", label: "banned?", type: "decision", col: 4, row: 6 },
+
+          { id: "e1", label: "400", type: "normal", col: 6, row: 1 },
+          { id: "e2", label: "400", type: "normal", col: 6, row: 2 },
+          { id: "e3", label: "401", type: "normal", col: 6, row: 3 },
+          { id: "e4", label: "401", type: "normal", col: 6, row: 4 },
+          { id: "e5", label: "404", type: "normal", col: 6, row: 5 },
+          { id: "e6", label: "403", type: "normal", col: 6, row: 6 },
+
+          { id: "d7", label: "rateLimit?", type: "decision", col: 4, row: 7 },
+          { id: "d8", label: "> maxReqs?", type: "decision", col: 3, row: 8 },
+          { id: "d9", label: "premium?", type: "decision", col: 2, row: 9 },
+          { id: "e7", label: "429", type: "normal", col: 0, row: 9 },
+
+          { id: "d10", label: "maint?", type: "decision", col: 4, row: 10 },
+          { id: "d10b", label: "admin?", type: "decision", col: 3, row: 11 },
+          { id: "e8", label: "503", type: "normal", col: 1, row: 11 },
+
+          { id: "d11", label: "plugins?", type: "decision", col: 4, row: 12 },
+          { id: "d12", label: "enabled?", type: "decision", col: 3, row: 13 },
+          { id: "d13", label: "check ok?", type: "decision", col: 2, row: 14 },
+          { id: "e9", label: "400", type: "normal", col: 0, row: 14 },
+
+          { id: "d14", label: "retries?", type: "decision", col: 4, row: 15 },
+          { id: "d15", label: "try", type: "decision", col: 3, row: 16 },
+          { id: "d16", label: "ok?", type: "decision", col: 3, row: 17 },
+          { id: "d17", label: "fatal?", type: "decision", col: 1, row: 17 },
+          { id: "e10", label: "500", type: "normal", col: 0, row: 17 },
+
+          { id: "d18", label: "result ok?", type: "decision", col: 4, row: 18 },
+          { id: "e11", label: "500", type: "normal", col: 6, row: 18 },
+
+          { id: "d19", label: "transform?", type: "decision", col: 4, row: 19 },
+          { id: "d20", label: "json?", type: "decision", col: 3, row: 20 },
+          { id: "d21", label: "xml?", type: "decision", col: 2, row: 21 },
+
+          { id: "d22", label: "cache?", type: "decision", col: 4, row: 22 },
+          { id: "d23", label: "GET?", type: "decision", col: 3, row: 23 },
+
+          { id: "d24", label: "redirect?", type: "decision", col: 4, row: 24 },
+          { id: "e12", label: "302", type: "normal", col: 6, row: 24 },
+          { id: "ok", label: "200", type: "normal", col: 4, row: 25 },
+          { id: "end", label: "exit", type: "exit", col: 4, row: 26 },
+        ],
+        edges: [
+          { from: "start", to: "d1" },
+          { from: "d1", to: "e1", label: "true", branch: "true" },
+          { from: "d1", to: "d2", label: "false", branch: "false" },
+          { from: "d2", to: "e2", label: "true", branch: "true" },
+          { from: "d2", to: "d3", label: "false", branch: "false" },
+          { from: "d3", to: "e3", label: "true", branch: "true" },
+          { from: "d3", to: "d4", label: "false", branch: "false" },
+          { from: "d4", to: "e4", label: "true", branch: "true" },
+          { from: "d4", to: "d5", label: "false", branch: "false" },
+          { from: "d5", to: "e5", label: "true", branch: "true" },
+          { from: "d5", to: "d6", label: "false", branch: "false" },
+          { from: "d6", to: "e6", label: "true", branch: "true" },
+          { from: "d6", to: "d7", label: "false", branch: "false" },
+          { from: "e1", to: "end" },
+          { from: "e2", to: "end" },
+          { from: "e3", to: "end" },
+          { from: "e4", to: "end" },
+          { from: "e5", to: "end" },
+          { from: "e6", to: "end" },
+
+          { from: "d7", to: "d8", label: "true", branch: "true" },
+          { from: "d7", to: "d10", label: "false", branch: "false" },
+          { from: "d8", to: "d9", label: "true", branch: "true" },
+          { from: "d8", to: "d10", label: "false", branch: "false" },
+          { from: "d9", to: "d10", label: "true", branch: "true" },
+          { from: "d9", to: "e7", label: "false", branch: "false" },
+          { from: "e7", to: "end" },
+
+          { from: "d10", to: "d10b", label: "true", branch: "true" },
+          { from: "d10", to: "d11", label: "false", branch: "false" },
+          { from: "d10b", to: "d11", label: "true", branch: "true" },
+          { from: "d10b", to: "e8", label: "false", branch: "false" },
+          { from: "e8", to: "end" },
+
+          { from: "d11", to: "d12", label: "true", branch: "true" },
+          { from: "d11", to: "d14", label: "false", branch: "false" },
+          { from: "d12", to: "d13", label: "true", branch: "true" },
+          { from: "d12", to: "d11", label: "false", branch: "false" },
+          { from: "d13", to: "d11", label: "true", branch: "true" },
+          { from: "d13", to: "e9", label: "false", branch: "false" },
+          { from: "e9", to: "end" },
+
+          { from: "d14", to: "d15", label: "true", branch: "true" },
+          { from: "d14", to: "d18", label: "false", branch: "false" },
+          { from: "d15", to: "d16", label: "true", branch: "true" },
+          { from: "d15", to: "d17", label: "false", branch: "false" },
+          { from: "d16", to: "d18", label: "true", branch: "true" },
+          { from: "d16", to: "d14", label: "false", branch: "false" },
+          { from: "d17", to: "d14", label: "true", branch: "true" },
+          { from: "d17", to: "e10", label: "false", branch: "false" },
+          { from: "e10", to: "end" },
+
+          { from: "d18", to: "e11", label: "true", branch: "true" },
+          { from: "d18", to: "d19", label: "false", branch: "false" },
+          { from: "e11", to: "end" },
+
+          { from: "d19", to: "d20", label: "true", branch: "true" },
+          { from: "d19", to: "d22", label: "false", branch: "false" },
+          { from: "d20", to: "d22", label: "true", branch: "true" },
+          { from: "d20", to: "d21", label: "false", branch: "false" },
+          { from: "d21", to: "d22", label: "true", branch: "true" },
+          { from: "d21", to: "d22", label: "false", branch: "false" },
+
+          { from: "d22", to: "d23", label: "true", branch: "true" },
+          { from: "d22", to: "d24", label: "false", branch: "false" },
+          { from: "d23", to: "d24", label: "true", branch: "true" },
+          { from: "d23", to: "d24", label: "false", branch: "false" },
+
+          { from: "d24", to: "e12", label: "true", branch: "true" },
+          { from: "d24", to: "ok", label: "false", branch: "false" },
+          { from: "e12", to: "end" },
+          { from: "ok", to: "end" },
+        ]
+      },
+    ];
+
+    // ── Syntax highlighting ─────────────────────────────────────────────
+    function highlightSyntax(code) {
+      let result = code
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+      result = result.replace(/(\/\/.*$)/gm, '<span class="cmt">$1</span>');
+      result = result.replace(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g, '<span class="str">$1</span>');
+      result = result.replace(/\b(function|const|let|var|if|else|for|while|return|try|catch|of|in|new|throw|switch|case|break|default|continue|typeof)\b/g, '<span class="kw">$1</span>');
+      result = result.replace(/\b(\d+\.?\d*)\b/g, '<span class="num">$1</span>');
+      result = result.replace(/\b([a-zA-Z_]\w*)\s*(?=\()/g, '<span class="fn">$1</span>');
+
+      return result;
+    }
+
+    // ── Render code ─────────────────────────────────────────────────────
+    function renderCode(example) {
+      const display = document.getElementById('code-display');
+      const lines = example.code.split('\n');
+      display.innerHTML = lines.map((line, i) => {
+        const lineNum = i + 1;
+        const hl = example.highlightLines.includes(lineNum) ? ' highlighted' : '';
+        return `<div class="line${hl}"><span class="line-num">${lineNum}</span><span class="line-content">${highlightSyntax(line)}</span></div>`;
+      }).join('');
+    }
+
+    // ── Graph renderer ──────────────────────────────────────────────────
+    const PILL_H = 40;   // pill height
+    const PILL_PX = 20;  // horizontal padding inside pill
+    const PILL_RX = 20;  // corner radius
+
+    function svgEl(tag, attrs) {
+      const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+      for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+      return el;
+    }
+
+    // Render an edge label with a white pill background so it's never obscured
+    function addEdgeLabel(svg, x, y, text, cssClass) {
+      // Measure text
+      const tmp = svgEl('text', { class: 'edge-label ' + cssClass, visibility: 'hidden' });
+      tmp.textContent = text;
+      svg.appendChild(tmp);
+      const bbox = tmp.getBBox();
+      svg.removeChild(tmp);
+
+      const padX = 5, padY = 2;
+      const g = svgEl('g', {});
+
+      // White background pill
+      g.appendChild(svgEl('rect', {
+        x: x - bbox.width / 2 - padX,
+        y: y - bbox.height / 2 - padY,
+        width: bbox.width + padX * 2,
+        height: bbox.height + padY * 2,
+        rx: 8, ry: 8,
+        fill: '#ffffff',
+        stroke: 'none',
+      }));
+
+      // Label text
+      const labelEl = svgEl('text', { x, y, class: 'edge-label ' + cssClass });
+      labelEl.textContent = text;
+      g.appendChild(labelEl);
+
+      svg.appendChild(g);
+    }
+
+    // Measure text width using a hidden SVG text element
+    function measureText(svg, label) {
+      const txt = svgEl('text', { class: 'node-label', visibility: 'hidden' });
+      txt.textContent = label;
+      svg.appendChild(txt);
+      const w = txt.getBBox().width;
+      svg.removeChild(txt);
+      return w;
+    }
+
+    // Get the point where a ray from (cx,cy) toward (tx,ty) exits the pill boundary
+    function pillEdgePoint(cx, cy, halfW, halfH, tx, ty) {
+      const dx = tx - cx;
+      const dy = ty - cy;
+      if (dx === 0 && dy === 0) return { x: cx, y: cy - halfH };
+
+      // For mostly-vertical connections, exit from top/bottom center
+      // For mostly-horizontal, exit from left/right center
+      // For angled, interpolate
+      const absDx = Math.abs(dx);
+      const absDy = Math.abs(dy);
+      const angle = Math.atan2(absDy, absDx); // 0 = horizontal, PI/2 = vertical
+
+      if (angle > Math.PI / 4) {
+        // More vertical — exit from top or bottom
+        return { x: cx, y: cy + (dy > 0 ? halfH : -halfH) };
+      } else {
+        // More horizontal — exit from left or right
+        return { x: cx + (dx > 0 ? halfW : -halfW), y: cy };
+      }
+    }
+
+    function renderGraph(example) {
+      const svg = document.getElementById('graph-svg');
+      const container = document.getElementById('graph-container');
+      const { width: W, height: containerH } = container.getBoundingClientRect();
+
+      const defs = svg.querySelector('defs');
+      svg.innerHTML = '';
+      svg.appendChild(defs);
+
+      // Compute grid bounds
+      let maxCol = 0, maxRow = 0;
+      for (const n of example.nodes) {
+        if (n.col > maxCol) maxCol = n.col;
+        if (n.row > maxRow) maxRow = n.row;
+      }
+
+      const padX = 100, padY = 40;
+      const minCellH = 65; // minimum row height so tall graphs stay legible
+      const cellW = maxCol > 0 ? (W - padX * 2) / maxCol : 0;
+      const naturalCellH = maxRow > 0 ? (containerH - padY * 2) / maxRow : 0;
+      const cellH = Math.max(naturalCellH, minCellH);
+      const H = padY * 2 + maxRow * cellH;
+
+      // Set SVG height for scrolling if needed
+      svg.style.height = H > containerH ? H + 'px' : '100%';
+
+      // Build node position map with pill dimensions
+      const pos = new Map();
+      for (const n of example.nodes) {
+        const x = padX + n.col * cellW;
+        const y = padY + n.row * cellH;
+        const textW = measureText(svg, n.label);
+        const pillW = textW + PILL_PX * 2;
+        pos.set(n.id, { ...n, x, y, halfW: pillW / 2, halfH: PILL_H / 2 });
+      }
+
+      // ── Draw edges first (behind nodes) ─────────────────────────────
+      for (const edge of example.edges) {
+        const from = pos.get(edge.from);
+        const to = pos.get(edge.to);
+        if (!from || !to) continue;
+
+        let branchClass = '';
+        let marker = 'url(#arrow)';
+        if (edge.branch === 'true') { branchClass = ' true-branch'; marker = 'url(#arrow-true)'; }
+        else if (edge.branch === 'false') { branchClass = ' false-branch'; marker = 'url(#arrow-false)'; }
+
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
+        const isBack = to.y <= from.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (isBack && dist > 1) {
+          // Back edge — exit left side of 'from', route left, go up, enter left side of 'to'
+          const leftMost = Math.min(from.x - from.halfW, to.x - to.halfW);
+          // Clamp route column: at least 30px from left edge, 40px left of leftmost pill
+          const routeX = Math.max(30, leftMost - 40);
+
+          // Start: exit from left side of 'from' pill
+          const sx = from.x - from.halfW;
+          const sy = from.y;
+          // End: enter left side of 'to' pill
+          const ex = to.x - to.halfW;
+          const ey = to.y;
+
+          // Rounded polyline: left, up, right
+          const r = Math.min(16, Math.abs(sx - routeX) / 2, Math.abs(sy - ey) / 2);
+          const d = [
+            `M ${sx} ${sy}`,
+            `L ${routeX + r} ${sy}`,
+            `Q ${routeX} ${sy}, ${routeX} ${sy - r}`,
+            `L ${routeX} ${ey + r}`,
+            `Q ${routeX} ${ey}, ${routeX + r} ${ey}`,
+            `L ${ex} ${ey}`,
+          ].join(' ');
+
+          svg.appendChild(svgEl('path', {
+            d,
+            class: 'edge-path' + branchClass,
+            'marker-end': marker,
+          }));
+
+          if (edge.label) {
+            const lx = routeX - 16;
+            const ly = (sy + ey) / 2;
+            const cls = edge.branch === 'true' ? 'true-label' : edge.branch === 'false' ? 'false-label' : 'neutral-label';
+            addEdgeLabel(svg, lx, ly, edge.label, cls);
+          }
+        } else if (dist > 1) {
+          // Forward edge — straight line between pill boundaries
+          const sp = pillEdgePoint(from.x, from.y, from.halfW, from.halfH, to.x, to.y);
+          const ep = pillEdgePoint(to.x, to.y, to.halfW, to.halfH, from.x, from.y);
+
+          svg.appendChild(svgEl('line', {
+            x1: sp.x, y1: sp.y, x2: ep.x, y2: ep.y,
+            class: 'edge-path' + branchClass,
+            'marker-end': marker,
+          }));
+
+          if (edge.label) {
+            // Place label at 35% along the edge (closer to source, away from target arrowhead)
+            const t = 0.35;
+            const mx = sp.x + (ep.x - sp.x) * t;
+            const my = sp.y + (ep.y - sp.y) * t;
+            const edx = ep.x - sp.x;
+            const edy = ep.y - sp.y;
+            const edist = Math.sqrt(edx * edx + edy * edy);
+            const ndx = edist > 0 ? edx / edist : 0;
+            const ndy = edist > 0 ? edy / edist : 1;
+            const px = -ndy * 18;
+            const py = ndx * 18;
+            const cls = edge.branch === 'true' ? 'true-label' : edge.branch === 'false' ? 'false-label' : 'neutral-label';
+            addEdgeLabel(svg, mx + px, my + py, edge.label, cls);
+          }
+        }
+      }
+
+      // ── Draw nodes on top ───────────────────────────────────────────
+      for (const n of example.nodes) {
+        const p = pos.get(n.id);
+        const g = svgEl('g', {});
+
+        let nodeClass = 'node-pill';
+        if (n.type === 'entry') nodeClass += ' entry';
+        else if (n.type === 'exit') nodeClass += ' exit';
+        else if (n.type === 'decision') nodeClass += ' decision';
+
+        g.appendChild(svgEl('rect', {
+          x: p.x - p.halfW,
+          y: p.y - p.halfH,
+          width: p.halfW * 2,
+          height: PILL_H,
+          rx: PILL_RX,
+          ry: PILL_RX,
+          class: nodeClass,
+        }));
+
+        const txt = svgEl('text', { x: p.x, y: p.y, class: 'node-label' });
+        txt.textContent = n.label;
+        g.appendChild(txt);
+
+        svg.appendChild(g);
+      }
+    }
+
+    // ── Update stats ────────────────────────────────────────────────────
+    function updateStats(example) {
+      const E = example.edges.length;
+      const N = example.nodes.length;
+      const M = example.complexity;
+
+      const valEl = document.getElementById('complexity-value');
+      valEl.textContent = M;
+      valEl.className = 'value ' + (M <= 2 ? 'complexity-low' : M <= 4 ? 'complexity-med' : 'complexity-high');
+
+      document.getElementById('edge-count').textContent = E;
+      document.getElementById('node-count').textContent = N;
+      document.getElementById('stat-edges').textContent = E;
+      document.getElementById('stat-nodes').textContent = N;
+      document.getElementById('stat-paths').textContent = M;
+
+      document.getElementById('description').innerHTML =
+        `<h3>${example.name}</h3><p>${example.description}</p>`;
+    }
+
+    // ── Tabs ────────────────────────────────────────────────────────────
+    function setupTabs() {
+      const tabsEl = document.getElementById('example-tabs');
+      examples.forEach((ex, i) => {
+        const btn = document.createElement('button');
+        btn.textContent = `${ex.name} (${ex.complexity})`;
+        btn.onclick = () => selectExample(i);
+        tabsEl.appendChild(btn);
+      });
+    }
+
+    function selectExample(index) {
+      document.querySelectorAll('.example-tabs button')
+        .forEach((b, i) => b.classList.toggle('active', i === index));
+      const ex = examples[index];
+      renderCode(ex);
+      renderGraph(ex);
+      updateStats(ex);
+    }
+
+    // ── Init ────────────────────────────────────────────────────────────
+    setupTabs();
+    selectExample(0);
+
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        const idx = [...document.querySelectorAll('.example-tabs button')]
+          .findIndex(b => b.classList.contains('active'));
+        if (idx >= 0) renderGraph(examples[idx]);
+      }, 100);
+    });
+
+    document.addEventListener('keydown', (e) => {
+      const btns = [...document.querySelectorAll('.example-tabs button')];
+      const idx = btns.findIndex(b => b.classList.contains('active'));
+      if (e.key === 'ArrowRight' && idx < btns.length - 1) selectExample(idx + 1);
+      else if (e.key === 'ArrowLeft' && idx > 0) selectExample(idx - 1);
+    });
+  </script>
+</body>
+</html>
